@@ -41,6 +41,9 @@ class SceneModel(L.LightningModule):
             nn.ReLU(),
             nn.Conv2d(512, 512, 3, padding=1, stride=2),
             nn.BatchNorm2d(512),
+            nn.ReLU(),
+            nn.Conv2d(512, 512, 3, padding=1, stride=2),
+            nn.BatchNorm2d(512),
             nn.ReLU()
         )
 
