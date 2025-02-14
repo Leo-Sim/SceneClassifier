@@ -30,6 +30,9 @@ class SceneDataset(Dataset):
 
         self._get_all_image_data()
 
+    def get_label_detail(self):
+        return self.label_info
+
     def _get_all_image_data(self):
 
         dir_name =  self.dir_prefix + self.goal.lower()

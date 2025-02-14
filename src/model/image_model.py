@@ -3,22 +3,32 @@ from torch import optim, nn
 import torch
 import lightning as L
 import matplotlib.pyplot as plt
-
+import seaborn as sns
 from torchvision.models import resnet50
 
 from torchmetrics import Accuracy, Precision, Recall, F1Score
+from torchmetrics import ConfusionMatrix
 
 
 
 class SceneModel(L.LightningModule):
 
-    def __init__(self, class_num, image_size, lr=0.003, momentum=0.9, weight_decay=0.01):
+    def __init__(self, class_num, image_size, lr=0.003, momentum=0.9, weight_decay=0.01, label_detail={}):
         super().__init__()
 
         self.loss_list = []
         self.accuracy_list = []
 
-        # self.resnet = resnet50(pretrained=False)
+        # self.class_names = class_names if class_names else [str(i) for i in range(class_num)]
+        self.confusion_matrix = ConfusionMatrix(task="multiclass", num_classes=class_num)
+        self.label_detail = label_detail
+
+        # if label_detail is None:
+        self.index_to_class = {v: k for k, v in self.label_detail.items()}
+
+
+        # epoch 20기준
+        #  첫 stride=2를 1로 했을 때 => 75%
 
         self.conv_layer = nn.Sequential(
             nn.Conv2d(3, 16, 3, padding=1, stride=1),
@@ -27,7 +37,7 @@ class SceneModel(L.LightningModule):
             nn.Conv2d(16, 32, 3, padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.Conv2d(32, 64, 3, padding=1, stride=2),
+            nn.Conv2d(32, 64, 3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.Conv2d(64, 128, 3, padding=1),
@@ -47,7 +57,7 @@ class SceneModel(L.LightningModule):
             nn.ReLU()
         )
 
-        conv_output_size = self._get_conv_output_size((128,128))
+        conv_output_size = self._get_conv_output_size(image_size)
         # conv_output_size = self._get_conv_output_size(image_size)
 
         self.fc_layer = nn.Sequential(
@@ -75,6 +85,9 @@ class SceneModel(L.LightningModule):
                                          average='macro')
         self.recall_value = Recall(task="multiclass", num_classes=class_num, average='macro')
         self.accuracy_value = Accuracy(task="multiclass", num_classes=class_num)
+
+    def _get_class_text(self, preds):
+        return [self.index_to_class[p] for p in preds.tolist()]
 
     def set_optimizer(self, optimizer):
         self.optimizer = optimizer
@@ -122,13 +135,14 @@ class SceneModel(L.LightningModule):
 
         prediction = torch.argmax(y_hat, dim=1)
 
+        self.confusion_matrix.update(prediction, y)
+
         loss = self.loss_function(y_hat, y)
         f1 = self.f1_value(prediction, y)
         precision = self.precision_value(prediction, y)
         accuracy = self.accuracy_value(prediction, y)
         recall = self.recall_value(prediction, y)
 
-        # save data for tensorboard
         self.log("loss", loss)
         self.log("f1_value", f1, prog_bar=True, on_step=False, on_epoch=True)
         self.log("precision_value", precision, prog_bar=True, on_step=False, on_epoch=True)
@@ -141,10 +155,17 @@ class SceneModel(L.LightningModule):
     def on_train_epoch_end(self):
 
         loss = self.trainer.callback_metrics['train_loss'].item()
-        print("loss : ",loss)
+
         self.loss_list.append(loss)
 
     def on_test_epoch_end(self):
+
+        cm = self.confusion_matrix.compute().cpu().numpy()
+
+        fig = self._plot_confusion_matrix(cm, self.index_to_class.values())
+
+        self.confusion_matrix.reset()
+
         # 손실 그래프
         plt.figure(figsize=(10, 5))
         plt.plot(self.loss_list, label="Loss", marker='o', linestyle='-')
@@ -155,4 +176,15 @@ class SceneModel(L.LightningModule):
         plt.grid()
         plt.show()
 
+    def _plot_confusion_matrix(self, cm, class_names):
 
+        fig, ax = plt.subplots(figsize=(6, 6))
+
+        class_labels = [self.index_to_class[i] for i in range(len(self.index_to_class))]
+
+        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=class_labels, yticklabels=class_labels)
+        plt.xlabel("Predicted")
+        plt.ylabel("Actual")
+        plt.title("Confusion Matrix")
+        plt.show()
+        return fig
