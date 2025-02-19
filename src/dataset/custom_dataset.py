@@ -30,6 +30,11 @@ class SceneDataset(Dataset):
 
         self._get_all_image_data()
 
+    def get_label_num_as_index(self):
+        if isinstance(next(iter(self.get_label_detail())), str):  # Key가 문자열이면 변환
+            return {v: k for k, v in self.get_label_detail().items()}
+        return
+
     def get_label_detail(self):
         return self.label_info
 
@@ -48,6 +53,8 @@ class SceneDataset(Dataset):
                 data_info = self.ImageDetail(os.path.join(sub_dir_path,sub_dir), self.label_info[dir])
                 self.data_list.append(data_info)
 
+    def get_dataset_size(self):
+        return self.__len__()
 
     def __len__(self):
         return len(self.data_list)
