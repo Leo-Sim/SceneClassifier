@@ -41,11 +41,11 @@ def imshow(img,  title="", labels=None, predictions=None, label_detail=None):
     plt.show()
 
 
-epoch = 1
+epoch = 50
 
 
 image_size = (128  , 128)
-lr = 0.002
+lr = 0.003
 weight_decay = 1e-5
 
 

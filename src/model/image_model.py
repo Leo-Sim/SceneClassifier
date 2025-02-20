@@ -4,10 +4,11 @@ import torch
 import lightning as L
 import matplotlib.pyplot as plt
 import seaborn as sns
-from torchvision.models import resnet50
+
 
 from torchmetrics import Accuracy, Precision, Recall, F1Score
 from torchmetrics import ConfusionMatrix
+from torch.optim.lr_scheduler import StepLR
 
 
 
@@ -27,56 +28,50 @@ class SceneModel(L.LightningModule):
         self.index_to_class = {v: k for k, v in self.label_detail.items()}
 
 
-        # epoch 20기준
-        #  첫 stride=2를 1로 했을 때 => 75%
-
         self.conv_layer = nn.Sequential(
-            nn.Conv2d(3, 16, 3, padding=1, stride=1),
+            nn.Conv2d(3, 16, 3, padding=1),
             nn.BatchNorm2d(16),
             nn.ReLU(),
             nn.Conv2d(16, 32, 3, padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU(),
+            nn.MaxPool2d(2),
             nn.Conv2d(32, 64, 3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.Conv2d(64, 128, 3, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(),
+            nn.MaxPool2d(2),
             nn.Conv2d(128, 256, 3, padding=1),
             nn.BatchNorm2d(256),
             nn.ReLU(),
-            nn.Conv2d(256, 512, 3, padding=1, stride=2),
+            nn.Conv2d(256, 512, 3, padding=1),
             nn.BatchNorm2d(512),
             nn.ReLU(),
-            nn.Conv2d(512, 512, 3, padding=1, stride=2),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-            nn.Conv2d(512, 512, 3, padding=1, stride=2),
+            nn.Conv2d(512, 512, 3, padding=1),
             nn.BatchNorm2d(512),
             nn.ReLU()
         )
 
         conv_output_size = self._get_conv_output_size(image_size)
-        # conv_output_size = self._get_conv_output_size(image_size)
 
         self.fc_layer = nn.Sequential(
             nn.Flatten(),
             nn.Linear(conv_output_size, 512, bias=True),
             nn.BatchNorm1d(512),
             nn.ReLU(),
-            nn.Dropout(0.3),
+            nn.Dropout(0.2),
             nn.Linear(512, 4096, bias=True),
             nn.BatchNorm1d(4096),
             nn.ReLU(),
-            nn.Dropout(0.3),
+            nn.Dropout(0.2),
             nn.Linear(4096, class_num, bias=True),
         )
 
+        self.weight_decay = weight_decay
+        self.lr = lr
 
-        # Set default optimizer and loss function
-        # self.optimizer = optim.Adam(self.resnet.parameters(), lr=lr, weight_decay=weight_decay)
-        self.optimizer = optim.Adam(self.fc_layer.parameters(), lr=lr)
         self.loss_function = nn.CrossEntropyLoss()
 
         # this is to get the test results
@@ -108,10 +103,20 @@ class SceneModel(L.LightningModule):
         return output_size
 
     def configure_optimizers(self):
-        return self.optimizer
+
+        optimizer = optim.Adam(self.fc_layer.parameters(), lr=self.lr,weight_decay=self.weight_decay)
+        scheduler = StepLR(optimizer, step_size=10, gamma=0.5)
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "epoch",
+                "frequency": 1,
+            }
+        }
 
     def forward(self, x):
-        # return self.resnet(x)
+
         x = self.conv_layer(x)
         output = self.fc_layer(x)
 
